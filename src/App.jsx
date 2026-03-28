@@ -455,13 +455,13 @@ const BTN_V = {
   purple:    { background:"var(--purple-dim)", color:"var(--purple)", border:"1px solid rgba(176,108,254,.3)" },
 };
 function Btn({ children, onClick, variant="primary", style={}, disabled=false }) {
-  return <button onClick={onClick} disabled={disabled} style={{ padding:"12px 20px", borderRadius:"10px", fontFamily:"var(--font-ui)", fontSize:"13px", fontWeight:700, letterSpacing:"0.09em", textTransform:"uppercase", cursor:disabled?"default":"pointer", opacity:disabled? 0.4 : 1:1, ...BTN_V[variant], ...style }}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{ padding:"12px 20px", borderRadius:"10px", fontFamily:"var(--font-ui)", fontSize:"13px", fontWeight:700, letterSpacing:"0.09em", textTransform:"uppercase", cursor:disabled?"default":"pointer", opacity:disabled?.4:1, ...BTN_V[variant], ...style }}>{children}</button>;
 }
 function Tag({ children, done }) {
   return <span style={{ display:"inline-flex", alignItems:"center", gap:"5px", padding:"3px 9px", borderRadius:"5px", fontFamily:"var(--font-m)", fontSize:"10px", background:done?"rgba(0,229,176,.07)":"rgba(255,255,255,.03)", color:done?"var(--accent)":"var(--text3)", border:`1px solid ${done?"rgba(0,229,176,.18)":"var(--border)"}` }}>{done?"✓":"·"} {children}</span>;
 }
 function IconBtn({ children, onClick, disabled, danger, title }) {
-  return <button title={title} onClick={onClick} disabled={disabled} style={{ width:"26px", height:"26px", borderRadius:"6px", flexShrink:0, background:danger?"rgba(230,64,64,.07)":"var(--bg4)", border:`1px solid ${danger?"rgba(230,64,64,.18)":"var(--border)"}`, color:danger?"#f87171":"var(--text2)", cursor:disabled?"default":"pointer", opacity:disabled? 0.25 : 1:1, fontSize:"11px", display:"flex", alignItems:"center", justifyContent:"center" }}>{children}</button>;
+  return <button title={title} onClick={onClick} disabled={disabled} style={{ width:"26px", height:"26px", borderRadius:"6px", flexShrink:0, background:danger?"rgba(230,64,64,.07)":"var(--bg4)", border:`1px solid ${danger?"rgba(230,64,64,.18)":"var(--border)"}`, color:danger?"#f87171":"var(--text2)", cursor:disabled?"default":"pointer", opacity:disabled?.25:1, fontSize:"11px", display:"flex", alignItems:"center", justifyContent:"center" }}>{children}</button>;
 }
 
 // ─── TASK MANAGER ─────────────────────────────────────────────────────────────
@@ -687,7 +687,8 @@ function Onboarding({ onComplete }) {
           THIS SYSTEM TRACKS YOUR DISCIPLINE.<br/>
           <span style={{ color:"var(--purple)" }}>WIN EACH DAY.</span> EVERY DAY.
         </div>
-        <div className={`ob-inp${shaking?" shake":""}`} style={{ marginBottom:"12px" }}>
+        
+        <div className={`ob-inp ${shaking ? "shake" : ""}`} style={{ marginBottom:"12px" }}>
           <input ref={ref} type="text" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Your name" maxLength={30}
             style={{ width:"100%", background:"rgba(255,255,255,.04)", border:`1px solid ${shaking?"rgba(230,64,64,.5)":"rgba(176,108,254,.25)"}`, borderRadius:"12px", padding:"18px 20px", color:"var(--text)", fontFamily:"var(--font-d)", fontSize:"36px", outline:"none", letterSpacing:"0.1em", transition:"border-color .2s", boxShadow:"0 0 0 0 rgba(176,108,254,0)" }}/>
           {shaking&&<div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"#f87171", marginTop:"7px", letterSpacing:"0.1em" }}>A NAME IS REQUIRED TO PROCEED.</div>}
