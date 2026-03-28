@@ -680,7 +680,7 @@ function Onboarding({ onComplete }) {
         <div className="ob-logo" style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"var(--text3)", letterSpacing:"0.35em", marginBottom:"32px" }}>
           ◈ TAKE CTRL — BEHAVIORAL OS
         </div>
-        <div className="ob-h1" style={{ fontFamily:"var(--font-d)", fontSize:"clamp(60px,12vw,90px)", lineHeight:.9, color:"var(--accent)" }}>WHAT DO WE</div>
+        <div className="ob-h1" style={{ fontFamily:"var(--font-d)", fontSize:"clamp(60px,12vw,90px)", lineHeight:.9, color:"var(--accent)" }}>WHAT SHOULD WE</div>
         <div className="ob-h2" style={{ fontFamily:"var(--font-d)", fontSize:"clamp(60px,12vw,90px)", lineHeight:.95, color:"var(--text)", marginBottom:"12px" }}>CALL YOU?</div>
         <div className="ob-sub" style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text3)", letterSpacing:"0.15em", marginBottom:"28px", lineHeight:1.7 }}>
           THIS SYSTEM TRACKS YOUR DISCIPLINE.<br/>
