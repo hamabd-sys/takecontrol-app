@@ -687,8 +687,7 @@ function Onboarding({ onComplete }) {
           THIS SYSTEM TRACKS YOUR DISCIPLINE.<br/>
           <span style={{ color:"var(--purple)" }}>WIN EACH DAY.</span> EVERY DAY.
         </div>
-        
-        <div className={`ob-inp ${shaking ? "shake" : ""}`} style={{ marginBottom:"12px" }}>
+        <div className={`ob-inp${shaking?" shake":""}`} style={{ marginBottom:"12px" }}>
           <input ref={ref} type="text" value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} placeholder="Your name" maxLength={30}
             style={{ width:"100%", background:"rgba(255,255,255,.04)", border:`1px solid ${shaking?"rgba(230,64,64,.5)":"rgba(176,108,254,.25)"}`, borderRadius:"12px", padding:"18px 20px", color:"var(--text)", fontFamily:"var(--font-d)", fontSize:"36px", outline:"none", letterSpacing:"0.1em", transition:"border-color .2s", boxShadow:"0 0 0 0 rgba(176,108,254,0)" }}/>
           {shaking&&<div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"#f87171", marginTop:"7px", letterSpacing:"0.1em" }}>A NAME IS REQUIRED TO PROCEED.</div>}
@@ -938,7 +937,7 @@ function Dashboard({ navigate }) {
               <div style={{ fontFamily:"var(--font-d)", fontSize:"28px", color:allPrayers?"var(--accent)":"var(--text)" }}>{allPrayers?"All Prayers Done":"Prayers"}</div>
             </div>
             <div style={{ display:"flex", gap:"7px", alignItems:"center" }}>
-              {PRAYERS_DATA.map(p=>{const d=!!(dayLog[p.key]?.fard);return<div key={p.key} style={{ width:"11px", height:"11px", borderRadius:"50%", background:d?p.color:"var(--bg4)", border:`1px solid ${d?p.color:"var(--border2)"}`, boxShadow:d?`0 0 6px ${p.color}66`:"none", transition:"all .2s" }}/>;});}
+              {PRAYERS_DATA.map(p=>{const d=!!(dayLog[p.key]?.fard);return<div key={p.key} style={{ width:"11px", height:"11px", borderRadius:"50%", background:d?p.color:"var(--bg4)", border:`1px solid ${d?p.color:"var(--border2)"}`, boxShadow:d?`0 0 6px ${p.color}66`:"none", transition:"all .2s" }}/>;})}
               <span style={{ fontFamily:"var(--font-d)", fontSize:"26px", color:allPrayers?"var(--accent)":"var(--text2)", marginLeft:"8px" }}>{prayersDone}/5</span>
             </div>
           </div>
