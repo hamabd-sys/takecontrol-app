@@ -1,4 +1,5 @@
 import { useState, useEffect, useReducer, createContext, useContext, useCallback, useRef } from "react";
+import { MORNING_ATHKAR, NIGHT_ATHKAR, PRAYER_HADITHS, getSurahFromPage, getPageFromSurah } from "./data";
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -34,6 +35,8 @@ const GlobalStyles = () => (
     @keyframes shake    {0%,100%{transform:translateX(0);}20%,60%{transform:translateX(-7px);}40%,80%{transform:translateX(7px);}}
     @keyframes glowPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,229,176,.3);}50%{box-shadow:0 0 18px 4px rgba(0,229,176,.12);}}
     @keyframes purpleGlow{0%,100%{box-shadow:0 0 0 0 rgba(176,108,254,.3);}50%{box-shadow:0 0 20px 4px rgba(176,108,254,.15);}}
+    @keyframes purpleNeonPulse{0%,100%{box-shadow:0 0 10px rgba(176,108,254,.4), 0 0 20px rgba(176,108,254,.2), inset 0 0 10px rgba(176,108,254,.1);}50%{box-shadow:0 0 20px rgba(176,108,254,.6), 0 0 40px rgba(176,108,254,.3), inset 0 0 15px rgba(176,108,254,.2);}}
+    @keyframes purpleGlowText{0%,100%{text-shadow:0 0 10px rgba(176,108,254,.5), 0 0 20px rgba(176,108,254,.3);}50%{text-shadow:0 0 20px rgba(176,108,254,.8), 0 0 30px rgba(176,108,254,.5), 0 0 40px rgba(176,108,254,.3);}}
     @keyframes swordSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
     .fu {animation:fadeUp .35s ease both;}
     .fu1{animation:fadeUp .35s .06s ease both;}
@@ -51,6 +54,8 @@ const GlobalStyles = () => (
     .ob-btn {animation:revealUp .5s  .90s cubic-bezier(.2,1,.3,1) both;}
     .shake  {animation:shake .4s ease;}
     .glow-complete{animation:glowPulse 1.8s ease 3;}
+    .purple-neon{animation:purpleNeonPulse 2s ease infinite;}
+    .purple-glow-text{animation:purpleGlowText 2s ease infinite;}
   `}</style>
 );
 
@@ -324,7 +329,7 @@ const buildInitial = () => ({
   sleep:    { tasks:MK_SLEEP(), tasksLastCheck:"", hours:null, lastCheck:"" },
   control:  { streak:0, best:0, lastCheck:"", history:[], triggers:{boredom:0,stress:0,lateNight:0,other:0} },
   prayers:  {},
-  quran:    { logs:[] },
+  quran:    { logs:[], uniquePages:new Set() },
 });
 
 // ─── REDUCER ──────────────────────────────────────────────────────────────────
@@ -394,8 +399,37 @@ function reducer(state, action) {
       const pLog=dayLog[prayerKey]||{};
       return { ...state, prayers:{ ...state.prayers,[date]:{ ...dayLog,[prayerKey]:{ ...pLog,[field]:!pLog[field] } } } };
     }
-    case "LOG_QURAN":        return { ...state, quran:{ logs:[...state.quran.logs,action.entry] } };
-    case "DELETE_QURAN_LOG": return { ...state, quran:{ logs:state.quran.logs.filter(l=>l.id!==action.id) } };
+    case "LOG_QURAN": {
+      const entry = action.entry;
+      const uniquePages = new Set(state.quran.uniquePages || []);
+
+      if (entry.fromPage) {
+        for (let i = 0; i < entry.pages; i++) {
+          uniquePages.add(entry.fromPage + i);
+        }
+      }
+
+      return { ...state, quran:{ logs:[...state.quran.logs, entry], uniquePages } };
+    }
+    case "DELETE_QURAN_LOG": {
+      const entry = state.quran.logs.find(l => l.id === action.id);
+      const uniquePages = new Set(state.quran.uniquePages || []);
+
+      if (entry && entry.fromPage) {
+        for (let i = 0; i < entry.pages; i++) {
+          const pageToCheck = entry.fromPage + i;
+          const stillExists = state.quran.logs.some(l =>
+            l.id !== action.id && l.fromPage &&
+            pageToCheck >= l.fromPage && pageToCheck < l.fromPage + l.pages
+          );
+          if (!stillExists) {
+            uniquePages.delete(pageToCheck);
+          }
+        }
+      }
+
+      return { ...state, quran:{ logs:state.quran.logs.filter(l=>l.id!==action.id), uniquePages } };
+    }
     case "RESET": return buildInitial();
     default: return state;
   }
@@ -409,10 +443,26 @@ function StoreProvider({ children }) {
       const raw = localStorage.getItem("tc_v6");
       if (!raw) return buildInitial();
       const s = JSON.parse(raw); const i = buildInitial();
-      return { profile:s.profile||i.profile, weight:s.weight||i.weight, wake:s.wake||i.wake, training:s.training||i.training, sleep:s.sleep||i.sleep, control:s.control||i.control, prayers:s.prayers||i.prayers, quran:s.quran||i.quran };
+      const quran = s.quran ? {
+        logs: s.quran.logs || [],
+        uniquePages: new Set(s.quran.uniquePagesArray || [])
+      } : i.quran;
+      return { profile:s.profile||i.profile, weight:s.weight||i.weight, wake:s.wake||i.wake, training:s.training||i.training, sleep:s.sleep||i.sleep, control:s.control||i.control, prayers:s.prayers||i.prayers, quran };
     } catch { return buildInitial(); }
   });
-  useEffect(() => { try { localStorage.setItem("tc_v6", JSON.stringify(state)); } catch {} }, [state]);
+  useEffect(() => {
+    try {
+      const stateToSave = {
+        ...state,
+        quran: {
+          ...state.quran,
+          uniquePagesArray: Array.from(state.quran.uniquePages || [])
+        }
+      };
+      delete stateToSave.quran.uniquePages;
+      localStorage.setItem("tc_v6", JSON.stringify(stateToSave));
+    } catch {}
+  }, [state]);
   return <Ctx.Provider value={{ state, dispatch }}>{children}</Ctx.Provider>;
 }
 const useStore = () => useContext(Ctx);
@@ -969,13 +1019,49 @@ function Wake() {
   const { state, dispatch } = useStore();
   const hour = new Date().getHours();
   const greeting = hour<12?"Good Morning.":hour<17?"Afternoon Protocol.":"Evening Check.";
+  const [expandedAthkar, setExpandedAthkar] = useState(null);
+
   return (
     <div style={{ display:"grid", gap:"18px", maxWidth:"620px" }}>
       <Card cls="fu">
         <div style={{ fontFamily:"var(--font-d)", fontSize:"54px", lineHeight:1.05, color:"var(--text)", marginBottom:"4px" }}>{greeting}</div>
         <PageSub>WAKE PROTOCOL — {getTodayDate()}</PageSub>
       </Card>
-      <Card cls="fu1">
+
+      <Card cls="fu1" style={{ borderLeft:"3px solid var(--purple)", boxShadow:"-2px 0 12px rgba(176,108,254,.15)" }}>
+        <Label purple>Morning Athkar — أذكار الصباح</Label>
+        <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text3)", marginBottom:"12px", lineHeight:1.6 }}>
+          Recite these morning remembrances to start your day with Allah's blessings
+        </div>
+        <div style={{ display:"grid", gap:"8px" }}>
+          {MORNING_ATHKAR.map((athkar, idx) => (
+            <div key={idx} style={{ background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:"9px", overflow:"hidden" }}>
+              <button onClick={() => setExpandedAthkar(expandedAthkar === idx ? null : idx)}
+                style={{ width:"100%", padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", cursor:"pointer", textAlign:"left" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"var(--font-ui)", fontSize:"14px", fontWeight:600, color:"var(--text)", marginBottom:"4px" }}>
+                    {athkar.transliteration}
+                  </div>
+                  {athkar.count && <div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"var(--purple)", marginTop:"3px" }}>×{athkar.count}</div>}
+                </div>
+                <div style={{ color:"var(--text3)", fontSize:"18px", transform:expandedAthkar === idx ? "rotate(180deg)" : "rotate(0)", transition:"transform .2s" }}>▼</div>
+              </button>
+              {expandedAthkar === idx && (
+                <div style={{ padding:"0 14px 14px", borderTop:"1px solid var(--border)" }}>
+                  <div style={{ fontFamily:"var(--font-ui)", fontSize:"20px", color:"var(--purple)", direction:"rtl", lineHeight:1.8, marginTop:"12px", marginBottom:"10px" }}>
+                    {athkar.ar}
+                  </div>
+                  <div style={{ fontFamily:"var(--font-ui)", fontSize:"13px", color:"var(--text2)", lineHeight:1.6 }}>
+                    {athkar.en}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card cls="fu2">
         <Label>Morning Routine — Check Off Each Item</Label>
         <TaskManager tasks={state.wake.tasks} prefix="WAKE" lastCheck={state.wake.lastCheck} dispatch={dispatch}/>
       </Card>
@@ -1036,6 +1122,7 @@ function Sleep() {
   const today = getTodayDate();
   const hoursLogged = state.sleep.lastCheck===today;
   const [hours,setHours] = useState(state.sleep.hours||7);
+  const [expandedAthkar, setExpandedAthkar] = useState(null);
   const getQ=(h)=>{if(h>=8)return{label:"Optimal",color:"var(--accent)"};if(h>=7)return{label:"Good",color:"var(--success)"};if(h>=6)return{label:"Adequate",color:"var(--warn)"};return{label:"Deficit",color:"#f87171"};};
   const q=getQ(hours);
   return (
@@ -1044,7 +1131,41 @@ function Sleep() {
         <div style={{ fontFamily:"var(--font-d)", fontSize:"52px", color:"var(--text)", marginBottom:"4px" }}>Sleep Protocol</div>
         <PageSub>{today} — WIND DOWN ROUTINE</PageSub>
       </Card>
-      <Card cls="fu1">
+
+      <Card cls="fu1" style={{ borderLeft:"3px solid var(--purple)", boxShadow:"-2px 0 12px rgba(176,108,254,.15)" }}>
+        <Label purple>Night Athkar — أذكار المساء</Label>
+        <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text3)", marginBottom:"12px", lineHeight:1.6 }}>
+          Recite these evening remembrances before sleep for protection and blessings
+        </div>
+        <div style={{ display:"grid", gap:"8px" }}>
+          {NIGHT_ATHKAR.map((athkar, idx) => (
+            <div key={idx} style={{ background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:"9px", overflow:"hidden" }}>
+              <button onClick={() => setExpandedAthkar(expandedAthkar === idx ? null : idx)}
+                style={{ width:"100%", padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", cursor:"pointer", textAlign:"left" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"var(--font-ui)", fontSize:"14px", fontWeight:600, color:"var(--text)", marginBottom:"4px" }}>
+                    {athkar.transliteration}
+                  </div>
+                  {athkar.count && <div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"var(--purple)", marginTop:"3px" }}>×{athkar.count}</div>}
+                </div>
+                <div style={{ color:"var(--text3)", fontSize:"18px", transform:expandedAthkar === idx ? "rotate(180deg)" : "rotate(0)", transition:"transform .2s" }}>▼</div>
+              </button>
+              {expandedAthkar === idx && (
+                <div style={{ padding:"0 14px 14px", borderTop:"1px solid var(--border)" }}>
+                  <div style={{ fontFamily:"var(--font-ui)", fontSize:"20px", color:"var(--purple)", direction:"rtl", lineHeight:1.8, marginTop:"12px", marginBottom:"10px" }}>
+                    {athkar.ar}
+                  </div>
+                  <div style={{ fontFamily:"var(--font-ui)", fontSize:"13px", color:"var(--text2)", lineHeight:1.6 }}>
+                    {athkar.en}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card cls="fu2">
         <Label>Pre-Sleep Routine — Check Off Each Item</Label>
         <TaskManager tasks={state.sleep.tasks} prefix="SLEEP" lastCheck={state.sleep.tasksLastCheck} dispatch={dispatch}/>
       </Card>
@@ -1092,7 +1213,7 @@ function Sleep() {
 }
 
 // ─── PRAYERS ─────────────────────────────────────────────────────────────────
-function Prayers() {
+function Prayers({ navigate }) {
   const { state, dispatch } = useStore();
   const today  = getTodayDate();
   const friday = isFridayToday();
@@ -1125,6 +1246,9 @@ function Prayers() {
             <div style={{ fontFamily:"var(--font-ui)", fontSize:"13px", color:"var(--text2)" }}>Friday — Dhuhr is replaced with Jumu'ah prayer.</div>
           </div>
         )}
+        <Btn variant="secondary" onClick={()=>navigate("prayerstats")} style={{ width:"100%", marginTop:"14px", padding:"11px" }}>
+          View Prayer Statistics →
+        </Btn>
       </Card>
 
       {PRAYERS_DATA.map((prayer,pidx)=>{
@@ -1146,7 +1270,7 @@ function Prayers() {
               </div>
               <div style={{ fontFamily:"var(--font-d)", fontSize:"22px", color:fardChecked?prayer.color:"var(--text3)", direction:"rtl" }}>{arabic}</div>
             </div>
-            <div style={{ display:"grid", gap:"7px" }}>
+            <div style={{ display:"grid", gap:"7px", marginBottom:"12px" }}>
               {rows.map((row,ridx)=>{
                 const checked=!!pLog[row.field]; const isFard=row.type==="fard";
                 return(
@@ -1161,6 +1285,19 @@ function Prayers() {
                 );
               })}
             </div>
+            {PRAYER_HADITHS[prayer.key] && (
+              <div style={{ padding:"12px", borderRadius:"8px", background:`${prayer.color}08`, border:`1px solid ${prayer.color}20` }}>
+                <div style={{ fontFamily:"var(--font-ui)", fontSize:"15px", color:prayer.color, direction:"rtl", lineHeight:1.7, marginBottom:"8px" }}>
+                  {PRAYER_HADITHS[prayer.key].ar}
+                </div>
+                <div style={{ fontFamily:"var(--font-ui)", fontSize:"12px", color:"var(--text2)", lineHeight:1.6, marginBottom:"4px" }}>
+                  {PRAYER_HADITHS[prayer.key].en}
+                </div>
+                <div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"var(--text3)" }}>
+                  — {PRAYER_HADITHS[prayer.key].reference} ({PRAYER_HADITHS[prayer.key].source})
+                </div>
+              </div>
+            )}
           </Card>
         );
       })}
@@ -1175,24 +1312,235 @@ function Prayers() {
   );
 }
 
+// ─── PRAYER STATISTICS ────────────────────────────────────────────────────────
+function PrayerStats({ navigate }) {
+  const { state } = useStore();
+  const [period, setPeriod] = useState(7);
+
+  const getLast7Days = () => {
+    const days = [];
+    for (let i = period - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      days.push(dateStr);
+    }
+    return days;
+  };
+
+  const days = getLast7Days();
+  const getPrayerCompletion = (dateStr) => {
+    const dayLog = state.prayers[dateStr] || {};
+    return PRAYERS_DATA.map(p => ({
+      key: p.key,
+      name: p.name,
+      completed: !!dayLog[p.key]?.fard,
+      color: p.color
+    }));
+  };
+
+  const totalPossible = days.length * 5;
+  const totalCompleted = days.reduce((sum, dateStr) => {
+    const dayLog = state.prayers[dateStr] || {};
+    return sum + PRAYERS_DATA.filter(p => dayLog[p.key]?.fard).length;
+  }, 0);
+  const completionRate = Math.round((totalCompleted / totalPossible) * 100);
+
+  return (
+    <div style={{ display:"grid", gap:"18px", maxWidth:"720px" }}>
+      <Card cls="fu">
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
+          <div>
+            <div style={{ fontFamily:"var(--font-d)", fontSize:"52px", lineHeight:1, color:"var(--text)" }}>Prayer Stats</div>
+            <PageSub>TRACK YOUR CONSISTENCY</PageSub>
+          </div>
+          <Btn variant="secondary" onClick={() => navigate("prayers")} style={{ padding:"10px 16px" }}>
+            ← Back
+          </Btn>
+        </div>
+      </Card>
+
+      <Card cls="fu1">
+        <Label>Time Period</Label>
+        <div style={{ display:"flex", gap:"10px", marginTop:"10px" }}>
+          {[7, 28, 90].map(p => (
+            <button key={p} onClick={() => setPeriod(p)}
+              style={{ flex:1, padding:"10px", borderRadius:"8px", background:period===p?"var(--purple)":"var(--bg3)", border:`1px solid ${period===p?"var(--purple)":"var(--border)"}`, color:period===p?"#000":"var(--text)", fontFamily:"var(--font-ui)", fontSize:"14px", fontWeight:600, cursor:"pointer", transition:"all .2s" }}>
+              {p} Days
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card cls="fu2" style={{ background:"linear-gradient(135deg,var(--bg2) 60%,rgba(176,108,254,.04) 100%)" }}>
+        <Label purple>Overall Completion</Label>
+        <div style={{ display:"flex", alignItems:"center", gap:"20px", marginTop:"12px", marginBottom:"16px" }}>
+          <div style={{ fontFamily:"var(--font-d)", fontSize:"72px", lineHeight:1, color:completionRate>=80?"var(--accent)":completionRate>=60?"var(--purple)":"var(--text2)" }} className={completionRate>=80?"purple-glow-text":""}>
+            {completionRate}%
+          </div>
+          <div>
+            <div style={{ fontFamily:"var(--font-ui)", fontSize:"16px", color:"var(--text)" }}>{totalCompleted} / {totalPossible} prayers</div>
+            <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text3)", marginTop:"3px" }}>Last {period} days</div>
+          </div>
+        </div>
+        <div style={{ height:"6px", background:"var(--bg4)", borderRadius:"3px" }}>
+          <div style={{ height:"100%", width:`${completionRate}%`, background:completionRate>=80?"var(--accent)":"var(--purple)", borderRadius:"3px", transition:"width .6s ease", boxShadow:`0 0 12px ${completionRate>=80?"rgba(0,229,176,.4)":"rgba(176,108,254,.4)"}` }}/>
+        </div>
+      </Card>
+
+      <Card cls="fu3">
+        <Label>Prayer Completion Table</Label>
+        <div style={{ overflowX:"auto", marginTop:"12px" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontFamily:"var(--font-ui)" }}>
+            <thead>
+              <tr style={{ borderBottom:"2px solid var(--border2)" }}>
+                <th style={{ padding:"10px 8px", textAlign:"left", fontWeight:600, fontSize:"11px", color:"var(--text3)", letterSpacing:"0.1em" }}>DATE</th>
+                {PRAYERS_DATA.map(p => (
+                  <th key={p.key} style={{ padding:"10px 8px", textAlign:"center", fontWeight:600, fontSize:"11px", color:"var(--text3)" }}>
+                    {p.name.toUpperCase()}
+                  </th>
+                ))}
+                <th style={{ padding:"10px 8px", textAlign:"center", fontWeight:600, fontSize:"11px", color:"var(--text3)" }}>TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {days.map(dateStr => {
+                const prayers = getPrayerCompletion(dateStr);
+                const dayTotal = prayers.filter(p => p.completed).length;
+                const isToday = dateStr === getTodayDate();
+                const date = new Date(dateStr + 'T12:00:00');
+                const dayName = date.toLocaleDateString("en", {weekday:"short"});
+                const dayNum = date.getDate();
+                const monthName = date.toLocaleDateString("en", {month:"short"});
+
+                return (
+                  <tr key={dateStr} style={{ borderBottom:"1px solid var(--border)", background:isToday?"rgba(176,108,254,.05)":"transparent" }}>
+                    <td style={{ padding:"10px 8px", fontSize:"13px", fontWeight:500, color:isToday?"var(--purple)":"var(--text)" }}>
+                      {dayName} {monthName} {dayNum}
+                      {isToday && <span style={{ marginLeft:"6px", fontSize:"10px", color:"var(--purple)" }}>●</span>}
+                    </td>
+                    {prayers.map(p => (
+                      <td key={p.key} style={{ padding:"10px 8px", textAlign:"center" }}>
+                        {p.completed ? (
+                          <span style={{ fontSize:"16px", color:p.color }}>✓</span>
+                        ) : (
+                          <span style={{ fontSize:"12px", color:"var(--border2)" }}>○</span>
+                        )}
+                      </td>
+                    ))}
+                    <td style={{ padding:"10px 8px", textAlign:"center", fontWeight:600, fontSize:"14px", color:dayTotal===5?"var(--accent)":"var(--text2)" }}>
+                      {dayTotal}/5
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card cls="fu4">
+        <Label>Prayer Breakdown</Label>
+        <div style={{ display:"grid", gap:"10px", marginTop:"12px" }}>
+          {PRAYERS_DATA.map(prayer => {
+            const completed = days.filter(dateStr => {
+              const dayLog = state.prayers[dateStr] || {};
+              return dayLog[prayer.key]?.fard;
+            }).length;
+            const rate = Math.round((completed / days.length) * 100);
+
+            return (
+              <div key={prayer.key} style={{ padding:"12px", borderRadius:"9px", background:"var(--bg3)", border:"1px solid var(--border)" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
+                  <div>
+                    <div style={{ fontFamily:"var(--font-d)", fontSize:"20px", color:prayer.color }}>{prayer.name}</div>
+                    <div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"var(--text3)", marginTop:"2px" }}>{prayer.arabic}</div>
+                  </div>
+                  <div style={{ fontFamily:"var(--font-d)", fontSize:"28px", color:rate>=80?"var(--accent)":"var(--text2)" }}>
+                    {rate}%
+                  </div>
+                </div>
+                <div style={{ height:"4px", background:"var(--bg4)", borderRadius:"2px" }}>
+                  <div style={{ height:"100%", width:`${rate}%`, background:prayer.color, borderRadius:"2px", transition:"width .4s ease" }}/>
+                </div>
+                <div style={{ fontFamily:"var(--font-m)", fontSize:"10px", color:"var(--text3)", marginTop:"6px" }}>
+                  {completed} / {days.length} days
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ─── QURAN ────────────────────────────────────────────────────────────────────
 function Quran() {
   const { state, dispatch } = useStore();
   const today = getTodayDate();
   const [pages,setPages]       = useState("");
   const [fromPage,setFromPage] = useState("");
+  const [toPage,setToPage]     = useState("");
   const [surah,setSurah]       = useState("");
 
-  const totalRead  = state.quran.logs.reduce((s,l)=>s+l.pages,0);
-  const khatmahs   = Math.floor(totalRead/QURAN_PAGES);
-  const currPages  = totalRead%QURAN_PAGES;
-  const pct        = Math.round((currPages/QURAN_PAGES)*100);
+  const uniquePagesCount = state.quran.uniquePages ? state.quran.uniquePages.size : 0;
+  const khatmahs = Math.floor(uniquePagesCount / QURAN_PAGES);
+  const currPages = uniquePagesCount % QURAN_PAGES;
+  const pct = Math.round((currPages / QURAN_PAGES) * 100);
   const todayPages = state.quran.logs.filter(l=>l.date===today).reduce((s,l)=>s+l.pages,0);
+
+  const handleFromPageChange = (val) => {
+    setFromPage(val);
+    if (val && !isNaN(parseInt(val))) {
+      const pageNum = parseInt(val);
+      const surahNum = getSurahFromPage(pageNum);
+      if (surahNum) {
+        const surahData = SURAHS.find(s => s.n === surahNum);
+        if (surahData) {
+          setSurah(surahData.en);
+        }
+      }
+
+      if (pages && !isNaN(parseInt(pages))) {
+        setToPage(String(pageNum + parseInt(pages) - 1));
+      }
+    } else {
+      setToPage("");
+    }
+  };
+
+  const handleSurahChange = (val) => {
+    setSurah(val);
+    if (val) {
+      const surahData = SURAHS.find(s =>
+        s.en.toLowerCase() === val.toLowerCase() ||
+        s.ar === val ||
+        s.alt.some(a => a.toLowerCase() === val.toLowerCase())
+      );
+      if (surahData) {
+        const page = getPageFromSurah(surahData.n);
+        if (page) {
+          setFromPage(String(page));
+        }
+      }
+    }
+  };
+
+  const handlePagesChange = (val) => {
+    setPages(val);
+    if (fromPage && !isNaN(parseInt(fromPage)) && val && !isNaN(parseInt(val))) {
+      setToPage(String(parseInt(fromPage) + parseInt(val) - 1));
+    } else {
+      setToPage("");
+    }
+  };
 
   const handleLog = () => {
     const n=parseInt(pages); if(!n||n<=0) return;
-    dispatch({type:"LOG_QURAN",entry:{id:uid(),date:today,time:new Date().toLocaleTimeString("en",{hour:"2-digit",minute:"2-digit"}),pages:n,fromPage:fromPage?parseInt(fromPage):null,surah:surah.trim()||null}});
-    setPages(""); setFromPage(""); setSurah("");
+    const fp = fromPage ? parseInt(fromPage) : null;
+    dispatch({type:"LOG_QURAN",entry:{id:uid(),date:today,time:new Date().toLocaleTimeString("en",{hour:"2-digit",minute:"2-digit"}),pages:n,fromPage:fp,surah:surah.trim()||null}});
+    setPages(""); setFromPage(""); setToPage(""); setSurah("");
   };
 
   return (
@@ -1203,7 +1551,7 @@ function Quran() {
       </Card>
 
       <div className="fu1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"13px" }}>
-        <Card><Stat label="TOTAL PAGES" value={totalRead||"0"} accent={totalRead>0?"var(--accent)":undefined}/></Card>
+        <Card><Stat label="UNIQUE PAGES" value={uniquePagesCount||"0"} accent={uniquePagesCount>0?"var(--accent)":undefined}/></Card>
         <Card><Stat label="TODAY"       value={todayPages||"0"} sub="pages"/></Card>
         <Card><Stat label="KHATMAHS"   value={khatmahs}        accent={khatmahs>0?"var(--purple)":undefined}/></Card>
       </div>
@@ -1230,20 +1578,25 @@ function Quran() {
         <Label>Log Recitation Session</Label>
         <div style={{ marginBottom:"12px" }}>
           <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text2)", letterSpacing:"0.14em", marginBottom:"6px" }}>PAGES READ *</div>
-          <input type="number" min="1" max="604" placeholder="e.g. 5" value={pages} onChange={e=>setPages(e.target.value)}
+          <input type="number" min="1" max="604" placeholder="e.g. 5" value={pages} onChange={e=>handlePagesChange(e.target.value)}
             style={{ width:"100%", background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:"9px", padding:"12px 16px", color:"var(--text)", fontFamily:"var(--font-d)", fontSize:"32px", outline:"none", textAlign:"center" }}/>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"14px" }}>
           <div>
-            <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text2)", letterSpacing:"0.12em", marginBottom:"6px" }}>FROM PAGE (optional)</div>
-            <input type="number" min="1" max="604" placeholder="e.g. 218" value={fromPage} onChange={e=>setFromPage(e.target.value)}
+            <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text2)", letterSpacing:"0.12em", marginBottom:"6px" }}>FROM PAGE</div>
+            <input type="number" min="1" max="604" placeholder="e.g. 218" value={fromPage} onChange={e=>handleFromPageChange(e.target.value)}
               style={{ width:"100%", background:"var(--bg3)", border:"1px solid var(--border)", borderRadius:"8px", padding:"9px 12px", color:"var(--text)", fontFamily:"var(--font-ui)", fontSize:"15px", outline:"none" }}/>
           </div>
           <div>
-            <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text2)", letterSpacing:"0.12em", marginBottom:"6px" }}>SURAH (optional)</div>
-            <SurahInput value={surah} onChange={setSurah}/>
+            <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--text2)", letterSpacing:"0.12em", marginBottom:"6px" }}>SURAH</div>
+            <SurahInput value={surah} onChange={handleSurahChange}/>
           </div>
         </div>
+        {toPage && (
+          <div style={{ fontFamily:"var(--font-m)", fontSize:"11px", color:"var(--purple)", marginBottom:"12px", padding:"8px 12px", background:"rgba(176,108,254,.08)", borderRadius:"6px", border:"1px solid rgba(176,108,254,.2)" }}>
+            Reading: Page {fromPage} → {toPage} {surah && `(${surah})`}
+          </div>
+        )}
         <Btn variant="primary" onClick={handleLog} disabled={!pages||parseInt(pages)<=0} style={{ width:"100%", padding:"13px" }}>
           Log {pages?`${pages} Page${parseInt(pages)!==1?"s":""}` :"Recitation"}
         </Btn>
@@ -1480,7 +1833,7 @@ function ControlMode({ navigate }) {
 const PAGE_LABELS = {
   dashboard:"Command Center", wake:"Wake Protocol", training:"Training Log",
   sleep:"Sleep Protocol", prayers:"Daily Prayers", quran:"Quran Log",
-  control:"Control Mode", weight:"Weight History",
+  control:"Control Mode", weight:"Weight History", prayerstats:"Prayer Statistics",
 };
 
 function AppInner() {
@@ -1495,15 +1848,16 @@ function AppInner() {
 
   const renderPage = () => {
     switch (page) {
-      case "dashboard": return <Dashboard navigate={navigate}/>;
-      case "wake":      return <Wake/>;
-      case "training":  return <Training/>;
-      case "sleep":     return <Sleep/>;
-      case "prayers":   return <Prayers/>;
-      case "quran":     return <Quran/>;
-      case "weight":    return <WeightDetail navigate={navigate}/>;
-      case "control":   return <ControlMode navigate={navigate}/>;
-      default:          return <Dashboard navigate={navigate}/>;
+      case "dashboard":   return <Dashboard navigate={navigate}/>;
+      case "wake":        return <Wake/>;
+      case "training":    return <Training/>;
+      case "sleep":       return <Sleep/>;
+      case "prayers":     return <Prayers navigate={navigate}/>;
+      case "prayerstats": return <PrayerStats navigate={navigate}/>;
+      case "quran":       return <Quran/>;
+      case "weight":      return <WeightDetail navigate={navigate}/>;
+      case "control":     return <ControlMode navigate={navigate}/>;
+      default:            return <Dashboard navigate={navigate}/>;
     }
   };
 
